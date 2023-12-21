@@ -1,0 +1,9 @@
+data/
+example/SparkWriteApplication.jar
+RecommendationApp/project/project
+RecommendationApp/project/target
+RecommendationApp/target
+raw-dataset/*
+!raw-dataset/encode-generate-dataset.py
+dataset/*
+jarfile/Recommender-assembly-1.0.0.jar
