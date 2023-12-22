@@ -58,7 +58,7 @@ def encode_and_save_dataset(file_path, save_path):
         for record in random.sample(ratings_output, 50):
             rating = random.randint(0, 5)
             product_id = find_key(product_id_mapping, record[1])
-            personal_ratings_file.write(f"0::{record[1]}::{rating}::{record[3]}::{product_id}\n")
+            personal_ratings_file.write(f"0::{record[1]}::{float(rating)}::{record[3]}::{product_id}\n")
 
 
 def main(root_directory):

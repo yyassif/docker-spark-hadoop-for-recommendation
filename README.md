@@ -32,17 +32,25 @@ docker-compose up -d
 
 # Recommendation Spark Application
 
-Jar file is packaged under the dataset directory.
+Jar file is packaged under the jarfile directory.
 
 - Compiled with scala 2.11.11
 - For Spark 2.1.0
 
 ## How to run (using Makefile)
 
-### Start the ingestion
+To Run the make the make command I've come up with this order which seem very mandatory to properly have the job done.
+
+### Start the Preprocessing
 
 ```
-make ingest
+make prepare-raw-dataset
+```
+
+### Start the Data Ingestion into HDFS
+
+```
+make ingest-hdfs
 ```
 
 ### Create the Fat-JAR File
@@ -51,14 +59,26 @@ make ingest
 make jar
 ```
 
-### Start the prediction
+### Start the Prediction
 
 ```
 make prediction
 ```
 
-### Start Cleaning the output
+### Save the Results into a result directory
 
 ```
-make clean
+make result
+```
+
+### Clean the Output directory in HDFS
+
+```
+make clean-output
+```
+
+### Clean the Input directory in HDFS
+
+```
+make clean-input
 ```

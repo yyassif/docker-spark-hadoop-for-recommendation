@@ -16,62 +16,57 @@ object Recommender {
     try {
       // Check if there are any command-line arguments
       if (args.length > 0) {
-        // Iterate through the arguments
         for (className <- args) {
           // Load personal ratings
-          val personalRatings = spark.textFile("hdfs://namenode:8020/input/$className/personalRatings.txt").map { line =>
+          val personalRatings = spark.textFile(s"hdfs://namenode:8020/input/$className/personalRatings.txt").map { line =>
             val fields = line.split("::")
             Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
-          }.filter(_.rating > 0.0)
+          }
 
           val myRatings = personalRatings.collect()
           val myRatingsRDD = spark.parallelize(myRatings, 1)
 
           // Load ratings and movie titles
-          val ratings = spark.textFile("hdfs://namenode:8020/input/$className/ratings.txt").map { line =>
+          val ratings = spark.textFile(s"hdfs://namenode:8020/input/$className/ratings.txt").map { line =>
             val fields = line.split("::")
             // Format: (timestamp % 10, Rating(userId, movieId, rating))
-            (fields(3).toLong % 10, Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble))
-          }
+            Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
+          }.cache()
 
-          val movies = spark.textFile("hdfs://namenode:8020/input/$className/products.txt").map { line =>
+          val products = spark.textFile(s"hdfs://namenode:8020/input/$className/products.txt").map { line =>
             val fields = line.split("::")
             // Format: (movieId, movieName)
             (fields(0).toInt, fields(1))
           }.collect().toMap
 
           val numRatings = ratings.count()
-          val numUsers = ratings.map(_._2.user).distinct().count()
-          val numMovies = ratings.map(_._2.product).distinct().count()
+          val numUsers = ratings.map(_.user).distinct().count()
+          val numProducts = ratings.map(_.product).distinct().count()
 
-          println("Got " + numRatings + " ratings from "
-            + numUsers + " users on " + numMovies + " movies.")
+          println(s"Got $numRatings ratings from $numUsers users on $numProducts products.")
 
           // Split ratings into train (60%), validation (20%), and test (20%) based on the last digit of the timestamp, add myRatings to train, and cache them
 
           val numPartitions = 4
 
-          // Training Data
-          val training = ratings.filter(x => x._1 < 6)
-            .values
-            .union(myRatingsRDD)
-            .repartition(numPartitions)
-            .cache()
+          // Use randomSplit to split the data
+          val splits = ratings.randomSplit(Array(0.6, 0.2, 0.2))
 
+          // Training Data
+          val training = splits(0).union(myRatingsRDD).repartition(numPartitions).cache()
+          
           // Validation Data
-          val validation = ratings.filter(x => x._1 >= 6 && x._1 < 8)
-            .values
-            .repartition(numPartitions)
-            .cache()
+          val validation = splits(1).repartition(numPartitions).cache()
 
           // Testing Data
-          val test = ratings.filter(x => x._1 >= 8).values.cache()
+          val test = splits(2).cache()
 
           val numTraining = training.count()
           val numValidation = validation.count()
           val numTest = test.count()
 
-          println("Training: " + numTraining + ", validation: " + numValidation + ", test: " + numTest)
+          println(s"Training: $numTraining, validation: $numValidation, test: $numTest")
+          ratings.unpersist()
 
           // Train models and evaluate them on the validation set
           val ranks = List(8, 12)
@@ -85,8 +80,7 @@ object Recommender {
           for (rank <- ranks; lambda <- lambdas; numIter <- numIters) {
             val model = ALS.train(training, rank, numIter, lambda)
             val validationRmse = computeRmse(model, validation, numValidation)
-            println("RMSE (validation) = " + validationRmse + " for the model trained with rank = "
-              + rank + ", lambda = " + lambda + ", and numIter = " + numIter + ".")
+            println(s"RMSE (validation) = $validationRmse for the model trained with rank = $rank, lambda = $lambda, and numIter = $numIter.")
             if (validationRmse < bestValidationRmse) {
               bestModel = Some(model)
               bestValidationRmse = validationRmse
@@ -99,7 +93,7 @@ object Recommender {
           // Evaluate the best model on the test set
           val testRmse = computeRmse(bestModel.get, test, numTest)
 
-          println("The best model was trained with Rank = " + bestRank + ", Lambda = " + bestLambda + ", numIter = " + bestNumIter + ", RMSE on the testSet is " + testRmse + ".")
+          println(s"The best model was trained with Rank = $bestRank, Lambda = $bestLambda, numIter = $bestNumIter, RMSE on the testSet is $testRmse.")
 
           // Create a naive baseline and compare it with the best model
           val meanRating = training.union(validation).map(_.rating).mean
@@ -110,7 +104,7 @@ object Recommender {
 
           // Make personalized recommendations
           val myRatedMovieIds = myRatings.map(_.product).toSet
-          val candidates = spark.parallelize(movies.keys.filter(!myRatedMovieIds.contains(_)).toSeq)
+          val candidates = spark.parallelize(products.keys.filter(!myRatedMovieIds.contains(_)).toSeq)
           val recommendations = bestModel.get
             .predict(candidates.map((0, _)))
             .collect()
@@ -118,8 +112,8 @@ object Recommender {
             .take(50)
 
           // Output the predictions
-          val moviesRdd = spark.parallelize(recommendations.zipWithIndex.map { case (r, i) => "%2d".format(i) + ": " + movies(r.product) }.toList)
-          moviesRdd.saveAsTextFile("hdfs://namenode:8020/output/$className")
+          val productsRdd = spark.parallelize(recommendations.zipWithIndex.map { case (r, i) => "%2d".format(i) + ": " + products(r.product) }.toList)
+          productsRdd.saveAsTextFile(s"hdfs://namenode:8020/output/$className")
         }
       } else {
         println("No command-line arguments provided.")
