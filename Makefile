@@ -21,7 +21,7 @@ jar:
 prediction:
 	docker run --rm -it --network ${DOCKER_NETWORK} --env-file ./hadoop.env --ulimit nofile=65536:65536 -e SPARK_MASTER=spark://spark-master:7077 --volume $(shell pwd)/jarfile:/data bde2020/spark-base:2.1.0-hadoop2.8-hive-java8 /spark/bin/spark-submit --executor-memory 8G --driver-memory 8G --master spark://spark-master:7077 ${JAR_FILEPATH} ${DATA_CLASSES}
 
-result:
+prediction-result:
 	mkdir -p result
 	for CLASS in $(ALL_DATA_CLASSES); do \
 		docker exec -it namenode hadoop fs -cat "/output/$$CLASS/*" > "result/$$CLASS.txt"; \

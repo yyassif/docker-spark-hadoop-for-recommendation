@@ -68,7 +68,7 @@ make prediction
 ### Save the Results into a result directory
 
 ```
-make result
+make prediction-result
 ```
 
 ### Clean the Output directory in HDFS
